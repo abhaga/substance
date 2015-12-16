@@ -3,8 +3,10 @@
 var isFunction = require('lodash/lang/isFunction');
 var extend = require('lodash/object/extend');
 var each = require('lodash/collection/each');
-var AbstractDocument = require('./AbstractDocument');
+var Document = require('./Document');
 var DocumentChange = require('./DocumentChange');
+var IncrementalData = require('./data/IncrementalData');
+var DocumentNodeFactory = require('./DocumentNodeFactory');
 
 var __id__ = 0;
 
@@ -30,8 +32,13 @@ var __id__ = 0;
   ```
 */
 function TransactionDocument(document, session) {
-  AbstractDocument.call(this, document.schema);
   this.__id__ = "TX_"+__id__++;
+
+  this.schema = document.schema;
+  this.nodeFactory = new DocumentNodeFactory(this);
+  this.data = new IncrementalData(this.schema, {
+    nodeFactory: this.nodeFactory
+  });
 
   this.document = document;
   this.session = session;
@@ -51,18 +58,11 @@ function TransactionDocument(document, session) {
 
 TransactionDocument.Prototype = function() {
 
-  this.isTransaction = function() {
-    return true;
-  };
-
   this.reset = function() {
     this.ops = [];
     this.before = {};
   };
 
-  /**
-    @include model/AbstractDocument#set
-  */
   this.create = function(nodeData) {
     var op = this.data.create(nodeData);
     if (!op) return;
@@ -72,9 +72,6 @@ TransactionDocument.Prototype = function() {
     return this.data.get(nodeData.id);
   };
 
-  /**
-    @include model/AbstractDocument#set
-  */
   this.delete = function(nodeId) {
     var op = this.data.delete(nodeId);
     if (!op) return;
@@ -82,9 +79,6 @@ TransactionDocument.Prototype = function() {
     return op;
   };
 
-  /**
-    @include model/AbstractDocument#set
-  */
   this.set = function(path, value) {
     var op = this.data.set(path, value);
     if (!op) return;
@@ -92,9 +86,6 @@ TransactionDocument.Prototype = function() {
     return op;
   };
 
-  /**
-    @include model/AbstractDocument#set
-  */
   this.update = function(path, diffOp) {
     var op = this.data.update(path, diffOp);
     if (!op) return;
@@ -113,22 +104,10 @@ TransactionDocument.Prototype = function() {
     return this.ops;
   };
 
-  this.apply = function(documentChange) {
+  this._apply = function(documentChange) {
     each(documentChange.ops, function(op) {
       this.data.apply(op);
     }, this);
-  };
-
-  this.getIndex = function(name) {
-    return this.data.getIndex(name);
-  };
-
-  this.createSelection = function() {
-    return this.document.createSelection.apply(this, arguments);
-  };
-
-  this.getSchema = function() {
-    return this.schema;
   };
 
   this._transaction = function(transformation) {
@@ -174,7 +153,6 @@ TransactionDocument.Prototype = function() {
     }
     var beforeState = this.before;
     var afterState = extend({}, beforeState, this.after);
-    var info = this.info;
     var ops = this.ops;
     var change;
     if (ops.length > 0) {
@@ -201,6 +179,6 @@ TransactionDocument.Prototype = function() {
 
 };
 
-AbstractDocument.extend(TransactionDocument);
+Document.extend(TransactionDocument);
 
 module.exports = TransactionDocument;
