@@ -20,11 +20,7 @@ function AbstractDocument(schema) {
   EventEmitter.call(this);
 
   this.schema = schema;
-
-  this.AUTO_ATTACH = true;
-
   this.nodeFactory = new DocumentNodeFactory(this);
-
   this.data = new IncrementalData(schema, {
     nodeFactory: this.nodeFactory
   });
@@ -281,18 +277,11 @@ EventEmitter.extend(AbstractDocument, function AbstractDocumentPrototype() {
    * @skip
    */
   this.loadSeed = function(seed) {
-    // Attention: order of nodes may be 'invalid'
-    // so that we should not attach the doc a created note
-    // until all its dependencies are created
-    //
-    // Thus we disable AUTO_ATTACH when creating nodes
-
-    // 1. clear all existing nodes (as they should be there in the seed)
+    // clear all existing nodes (as they should be there in the seed)
     each(this.data.nodes, function(node) {
       this.delete(node.id);
     }, this);
-    // 2. create nodes with AUTO_ATTACH disabled
-    // this._setAutoAttach(false);
+    // create nodes
     each(seed.nodes, function(nodeData) {
       this.create(nodeData);
     }, this);

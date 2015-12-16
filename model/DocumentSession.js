@@ -1,8 +1,11 @@
 "use strict";
 
+var extend = require('lodash/object/extend');
 var oo = require('../util/oo');
+var EventEmitter = require('../util/EventEmitter');
 var TransactionDocument = require('./TransactionDocument');
 var DefaultChangeCompressor = require('./DefaultChangeCompressor');
+var Selection = require('./Selection');
 
 /*
   TODO: Maybe find a suitable name.
@@ -14,15 +17,11 @@ var DefaultChangeCompressor = require('./DefaultChangeCompressor');
     - collaborative editing
 */
 function DocumentSession(doc, options) {
+  DocumentSession.super.apply(this);
+
   options = options || {};
   this.doc = doc;
-
-  // TODO: do we want to force transactions whenever a DocumentSession has been created?
-  doc.FORCE_TRANSACTIONS = true;
-
-  this.version = 0;
-
-  this.selection = null;
+  this.selection = Selection.nullSelection;
 
   // the stage is a essentially a clone of this document
   // used to apply a sequence of document operations
@@ -34,9 +33,21 @@ function DocumentSession(doc, options) {
   this.undoneChanges = [];
 
   this.compressor = options.compressor || new DefaultChangeCompressor();
+
+  this.doc.connect(this, {
+    'document:changed': this.onDocumentChange
+  });
 }
 
 DocumentSession.Prototype = function() {
+
+  this.getSelection = function() {
+    return this.selection;
+  };
+
+  this.setSelection = function(sel) {
+    this.selection = sel;
+  };
 
   this.canUndo = function() {
     return this.doneChanges.length > 0;
@@ -53,7 +64,7 @@ DocumentSession.Prototype = function() {
       this.stage._apply(inverted);
       this.doc._apply(inverted);
       this.undoneChanges.push(inverted);
-      this.doc._notifyChangeListeners(inverted, { 'replay': true });
+      this._notifyChangeListeners(inverted, { 'replay': true });
     } else {
       console.error('No change can be undone.');
     }
@@ -66,7 +77,7 @@ DocumentSession.Prototype = function() {
       this.stage._apply(inverted);
       this.doc._apply(inverted);
       this.doneChanges.push(inverted);
-      this.doc._notifyChangeListeners(inverted, { 'replay': true });
+      this._notifyChangeListeners(inverted, { 'replay': true });
     } else {
       console.error('No change can be redone.');
     }
@@ -75,14 +86,12 @@ DocumentSession.Prototype = function() {
   /**
     Start a transaction to manipulate the document
 
-    @param {object} [beforeState] object which will be used as before start of transaction
-    @param {object} [eventData] object which will be used as payload for the emitted document:change event
     @param {function} transformation a function(tx) that performs actions on the transaction document tx
 
     @example
 
     ```js
-    doc.transaction({ selection: sel }, {'event-hack': true}, function(tx, args) {
+    doc.transaction(function(tx, args) {
       tx.update(...);
       ...
       return {
@@ -91,26 +100,44 @@ DocumentSession.Prototype = function() {
     })
     ```
   */
-  this.transaction = function(beforeState, eventData, transformation) {
+  this.transaction = function(transformation, info) {
     /* jshint unused: false */
     if (this.isTransacting) {
       throw new Error('Nested transactions are not supported.');
     }
     this.isTransacting = true;
     this.stage.reset();
-    var change = this.stage._transaction.apply(this.stage, arguments);
+    var sel = this.selection;
+    info = info || {};
+    var change = this.stage._transaction(function(tx) {
+      tx.before.selection = sel;
+      var args = { selection: sel };
+      var result = transformation(tx, args) || {};
+      tx.after.selection = result.selection || sel;
+      extend(info, tx.info);
+    });
+    this.selection = change.after.selection;
     this.isTransacting = false;
+    this._commit(change, info);
+    this.emit('selection:changed', this.selection, this);
     return change;
   };
 
-  this.commit = function(change, info) {
+  this.onDocumentChange = function(change, info) {
+    if (info.session !== this) {
+      this.stage.apply(change);
+      // TODO: rebase change history
+    }
+  };
+
+  this._commit = function(change, info) {
     // apply the change
     change.timestamp = Date.now();
     // TODO: try to find a more explicit way, or a maybe a smarter way
     // to keep the TransactionDocument in sync
-    this.doc._apply(change, 'saveTransaction');
+    this.doc._apply(change);
 
-    var lastChange = this.getLastChange();
+    var lastChange = this._getLastChange();
     // try to merge this change with the last to get more natural changes
     // e.g. not every keystroke, but typed words or such.
     var merged = false;
@@ -126,31 +153,24 @@ DocumentSession.Prototype = function() {
     this.undoneChanges = [];
     // console.log('Document._saveTransaction took %s ms', (Date.now() - time));
     // time = Date.now();
-    if (!info.silent) {
-      // TODO: I would like to wrap this with a try catch.
-      // however, debugging gets inconvenient as caught exceptions don't trigger a breakpoint
-      // by default, and other libraries such as jquery throw noisily.
-      this.doc._notifyChangeListeners(change, info);
-    }
+    this._notifyChangeListeners(change, info);
   };
 
-  this._commitChange = function(change) {
-    /* jshint unused:false */
-    // TODO: send change to hub
-    // console.log('TODO: commit change to HUB', change._id);
+  this._notifyChangeListeners = function(change, info) {
+    info = info || {};
+    info.session = this;
+    // TODO: I would like to wrap this with a try catch.
+    // however, debugging gets inconvenient as caught exceptions don't trigger a breakpoint
+    // by default, and other libraries such as jquery throw noisily.
+    this.doc._notifyChangeListeners(change, info);
   };
 
-  this._receivedChange = function(change, newVersion) {
-    /* jshint unused: false */
-    // TODO: received a change from another client
-  };
-
-  this.getLastChange = function() {
+  this._getLastChange = function() {
     return this.doneChanges[this.doneChanges.length-1];
   };
 
 };
 
-oo.initClass(DocumentSession);
+oo.inherit(DocumentSession, EventEmitter);
 
 module.exports = DocumentSession;

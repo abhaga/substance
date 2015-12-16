@@ -194,16 +194,14 @@ QUnit.test("Container Annotation: Fuse annos", function(assert) {
 
   // Create a second container annotation to be fused
   // p3.content[6]...p4.content[9]
-  surface.transaction(function(tx) {
-    tx.create({
-      type: 'test-container-anno',
-      id: 'a4',
-      container: 'main',
-      startPath: ['p3', 'content'],
-      startOffset: 6,
-      endPath: ['p4', 'content'],
-      endOffset: 9,
-    });
+  doc.create({
+    type: 'test-container-anno',
+    id: 'a4',
+    container: 'main',
+    startPath: ['p3', 'content'],
+    startOffset: 6,
+    endPath: ['p4', 'content'],
+    endOffset: 9,
   });
   // Create a selection that overlaps both of the container annos
   var sel = doc.createSelection({
@@ -231,4 +229,3 @@ QUnit.test("Container Annotation: Fuse annos", function(assert) {
   var annos = docHelpers.getAnnotationsForSelection(doc, sel, 'test-container-anno', 'main');
   assert.equal(annos.length, 1, 'One strong anno should be found for sel');
 });
-

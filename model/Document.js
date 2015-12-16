@@ -71,8 +71,6 @@ function Document(schema) {
 
   this.initialize();
 
-  this.FORCE_TRANSACTIONS = false;
-
   // Note: using the general event queue (as opposed to calling _updateEventProxies from within _notifyChangeListeners)
   // so that handler priorities are considered correctly
   this.connect(this, {
@@ -129,18 +127,12 @@ Document.Prototype = function() {
   };
 
   this.create = function(nodeData) {
-    if (this.FORCE_TRANSACTIONS) {
-      throw new Error('Use a transaction!');
-    }
     var op = this._create(nodeData);
     this._notifyChangeListeners(new DocumentChange([op], {}, {}));
     return this.data.get(nodeData.id);
   };
 
   this.delete = function(nodeId) {
-    if (this.FORCE_TRANSACTIONS) {
-      throw new Error('Use a transaction!');
-    }
     var node = this.get(nodeId);
     var op = this._delete(nodeId);
     this._notifyChangeListeners(new DocumentChange([op], {}, {}));
@@ -148,9 +140,6 @@ Document.Prototype = function() {
   };
 
   this.set = function(path, value) {
-    if (this.FORCE_TRANSACTIONS) {
-      throw new Error('Use a transaction!');
-    }
     var oldValue = this.get(path);
     var op = this._set(path, value);
     this._notifyChangeListeners(new DocumentChange([op], {}, {}));
@@ -158,9 +147,6 @@ Document.Prototype = function() {
   };
 
   this.update = function(path, diff) {
-    if (this.FORCE_TRANSACTIONS) {
-      throw new Error('Use a transaction!');
-    }
     var op = this._update(path, diff);
     this._notifyChangeListeners(new DocumentChange([op], {}, {}));
     return op;
