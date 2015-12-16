@@ -6,6 +6,7 @@ var EventEmitter = require('../util/EventEmitter');
 var TransactionDocument = require('./TransactionDocument');
 var DefaultChangeCompressor = require('./DefaultChangeCompressor');
 var Selection = require('./Selection');
+var DocumentChange = require('./DocumentChange');
 
 /*
   TODO: Maybe find a suitable name.
@@ -60,11 +61,10 @@ DocumentSession.Prototype = function() {
   this.undo = function() {
     var change = this.doneChanges.pop();
     if (change) {
-      var inverted = change.invert();
-      this.stage._apply(inverted);
-      this.doc._apply(inverted);
-      this.undoneChanges.push(inverted);
-      this._notifyChangeListeners(inverted, { 'replay': true });
+      this.stage._apply(change);
+      this.doc._apply(change);
+      this.undoneChanges.push(change.invert());
+      this._notifyChangeListeners(change, { 'replay': true });
     } else {
       console.error('No change can be undone.');
     }
@@ -73,11 +73,10 @@ DocumentSession.Prototype = function() {
   this.redo = function() {
     var change = this.undoneChanges.pop();
     if (change) {
-      var inverted = change.invert();
-      this.stage._apply(inverted);
-      this.doc._apply(inverted);
-      this.doneChanges.push(inverted);
-      this._notifyChangeListeners(inverted, { 'replay': true });
+      this.stage._apply(change);
+      this.doc._apply(change);
+      this.doneChanges.push(change.invert());
+      this._notifyChangeListeners(change, { 'replay': true });
     } else {
       console.error('No change can be redone.');
     }
@@ -125,8 +124,11 @@ DocumentSession.Prototype = function() {
 
   this.onDocumentChange = function(change, info) {
     if (info.session !== this) {
-      this.stage.apply(change);
-      // TODO: rebase change history
+      this.stage._apply(change);
+      // rebase the change history
+      // TODO: as an optimization we could rebase the history lazily
+      DocumentChange.transform(this.doneChanges, change);
+      DocumentChange.transform(this.undoneChanges, change);
     }
   };
 
@@ -148,7 +150,7 @@ DocumentSession.Prototype = function() {
     }
     if (!merged) {
       // push to undo queue and wipe the redo queue
-      this.doneChanges.push(change);
+      this.doneChanges.push(change.invert());
     }
     this.undoneChanges = [];
     // console.log('Document._saveTransaction took %s ms', (Date.now() - time));
