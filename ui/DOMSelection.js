@@ -153,7 +153,20 @@ DOMSelection.Prototype = function() {
       return null;
     }
     if (wSel.isCollapsed) {
-      var coor = this._getCoordinate(wSel.anchorNode, wSel.anchorOffset, options);
+      var anchorNode = wSel.anchorNode;
+      var anchorOffset = wSel.anchorOffset;
+
+      if($(wSel.anchorNode.parentElement).is('.sm-local-user')) {
+        if(wSel.anchorNode.parentElement.previousSibling === null) {
+          anchorNode = wSel.anchorNode.parentElement.nextSibling;
+          anchorOffset = 0;
+        }
+        else {
+          anchorNode = wSel.anchorNode.parentElement.previousSibling;
+          anchorOffset = anchorNode.length;
+        }
+      }
+      var coor = this._getCoordinate(anchorNode, anchorOffset, options);
       range = _createRange(coor, coor, false, this.getContainerId());
       return range;
     }
